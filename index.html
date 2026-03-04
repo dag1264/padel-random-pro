@@ -17,40 +17,51 @@ body{
   text-align:center;
   padding:20px;
 }
+
 .card{
   background:white;
   color:#333;
   border-radius:18px;
   padding:18px;
   margin:15px auto;
-  max-width:700px;
+  max-width:420px;
   box-shadow:0 8px 20px rgba(0,0,0,0.35);
 }
-input{
+
+input,select{
   width:100%;
   padding:10px;
   margin-top:8px;
   border-radius:10px;
   border:1px solid #ccc;
+  box-sizing:border-box;
 }
-.agenda-grid{
-  display:grid;
-  grid-template-columns:80px 1fr 1fr;
-  gap:6px;
-  margin-top:15px;
-}
-.hora{ font-weight:bold; align-self:center; }
-.slot{
+
+button{
+  background:#00c853;
+  border:none;
+  color:white;
   padding:12px;
-  border-radius:10px;
+  border-radius:14px;
+  margin-top:10px;
+  width:100%;
   cursor:pointer;
-  font-size:14px;
-  transition:0.2s;
 }
-.libre{ background:#00c853; color:white; }
-.libre:hover{ transform:scale(1.05); }
-.ocupado{ background:#ff5252; color:white; cursor:not-allowed; }
-.pasado{ background:#999; color:white; cursor:not-allowed; }
+
+.admin{ background:#ff5252; }
+
+.item{
+  background:white;
+  color:#1e3c72;
+  margin:8px auto;
+  padding:12px;
+  border-radius:14px;
+  font-weight:bold;
+  max-width:420px;
+}
+
+.waiting{ background:#ffe082; color:#333; }
+.section-title{ font-weight:bold; margin-top:20px; }
 </style>
 </head>
 
@@ -58,137 +69,180 @@ input{
 
 <h1>🎾 Padel Random Pro</h1>
 
-<div class="card">
-  <h3>📅 Agenda</h3>
-  <input type="date" id="fechaAgenda">
-  <div id="agenda"></div>
+<div id="adminPanel" style="display:none;" class="card">
+  <h3>👑 Crear Turno</h3>
+  <input type="date" id="fecha">
+  <input type="time" id="inicio">
+  <input type="time" id="fin">
+  <button class="admin" id="crearTurno">Crear Turno</button>
 </div>
+
+<div class="card">
+  <h3>Turnos disponibles</h3>
+  <div id="listaTurnos"></div>
+</div>
+
+<div id="panelJugador" style="display:none;" class="card">
+  <h3>Anotarse</h3>
+  <input id="nombre" placeholder="Tu nombre">
+  <select id="tipo">
+    <option>Drive</option>
+    <option>Revés</option>
+  </select>
+  <button id="anotarse">Anotarme</button>
+</div>
+
+<div id="panelAdminTurno" style="display:none;" class="card">
+  <h3>Admin Turno</h3>
+  <input type="number" id="canchas" placeholder="Cantidad de canchas" min="1">
+  <button class="admin" id="sortear">Sortear</button>
+  <button class="admin" id="cerrarTurno">Cerrar Turno</button>
+</div>
+
+<div id="listaJugadores"></div>
+<div id="resultado"></div>
 
 <script type="module">
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, get, set }
+import { getDatabase, ref, push, onValue, remove, update } 
 from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-const firebaseConfig = { apiKey: "AIzaSyBYCPUSGq_uCutc3D10vSRCOtZRJZKr0fE", 
-                        authDomain: "turnos-padel-3f40e.firebaseapp.com", 
-                        databaseURL: "https://turnos-padel-3f40e-default-rtdb.firebaseio.com", 
-                        projectId: "turnos-padel-3f40e", 
-                        storageBucket: "turnos-padel-3f40e.firebasestorage.app", 
-                        messagingSenderId: "863154513883", 
-                        appId: "1:863154513883:web:a20fb9cf3307048a54e9fe" };
+const firebaseConfig = {
+  apiKey: "AIzaSyBYCPUSGq_uCutc3D10vSRCOtZRJZKr0fE",
+  authDomain: "turnos-padel-3f40e.firebaseapp.com",
+  databaseURL: "https://turnos-padel-3f40e-default-rtdb.firebaseio.com",
+  projectId: "turnos-padel-3f40e",
+  storageBucket: "turnos-padel-3f40e.firebasestorage.app",
+  messagingSenderId: "863154513883",
+  appId: "1:863154513883:web:a20fb9cf3307048a54e9fe"
+};
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-const fechaInput=document.getElementById("fechaAgenda");
-const agendaDiv=document.getElementById("agenda");
+const isAdmin = window.location.search.includes("admin=1234");
 
-fechaInput.value=new Date().toISOString().split("T")[0];
-fechaInput.addEventListener("change",cargarAgenda);
+if(isAdmin){
+  document.getElementById("adminPanel").style.display="block";
+}
 
-function generarHoras(){
-  const horas=[];
-  for(let h=9;h<23;h++){
-    horas.push(`${String(h).padStart(2,"0")}:00`);
-    horas.push(`${String(h).padStart(2,"0")}:30`);
+let turnoSeleccionado = null;
+
+function mezclar(lista){
+  for(let i=lista.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [lista[i],lista[j]]=[lista[j],lista[i]];
   }
-  return horas;
+  return lista;
 }
 
-function horaEsPasada(fecha,hora){
-  const ahora=new Date();
-  const bloque=new Date(`${fecha}T${hora}:00`);
-  return bloque<ahora;
-}
-
-async function cargarAgenda(){
-
-  const fecha=fechaInput.value;
-  agendaDiv.innerHTML="";
-  const grid=document.createElement("div");
-  grid.className="agenda-grid";
-  agendaDiv.appendChild(grid);
-
-  const horas=generarHoras();
-  grid.innerHTML="<div></div><div><b>Cancha 1</b></div><div><b>Cancha 2</b></div>";
-
-  const snapshot=await get(ref(db,"agenda/"+fecha));
+// LISTAR TURNOS
+onValue(ref(db,"turnos"), snapshot=>{
   const data=snapshot.val()||{};
-
-  horas.forEach(hora=>{
-    const horaDiv=document.createElement("div");
-    horaDiv.className="hora";
-    horaDiv.textContent=hora;
-    grid.appendChild(horaDiv);
-
-    for(let c=1;c<=2;c++){
-
-      const div=document.createElement("div");
-      const ocupado=data[hora]?.["cancha"+c];
-
-      if(horaEsPasada(fecha,hora)){
-        div.className="slot pasado";
-        div.textContent="Pasado";
-      }
-      else if(ocupado){
-        div.className="slot ocupado";
-        div.textContent=ocupado.nombre;
-      }
-      else{
-        div.className="slot libre";
-        div.textContent="Libre";
-        div.addEventListener("click",()=>reservar(fecha,hora,c));
-      }
-
-      grid.appendChild(div);
+  const listaDiv=document.getElementById("listaTurnos");
+  listaDiv.innerHTML="";
+  Object.entries(data).forEach(([id,t])=>{
+    if(t.estado==="abierto"){
+      const btn=document.createElement("button");
+      btn.textContent=`${t.fecha} ${t.inicio}-${t.fin}`;
+      btn.onclick=()=>seleccionarTurno(id);
+      listaDiv.appendChild(btn);
     }
+  });
+});
+
+// CREAR TURNO (ADMIN)
+document.getElementById("crearTurno").onclick=()=>{
+  const fecha=document.getElementById("fecha").value;
+  const inicio=document.getElementById("inicio").value;
+  const fin=document.getElementById("fin").value;
+
+  if(!fecha||!inicio||!fin) return alert("Completar datos");
+
+  push(ref(db,"turnos"),{
+    fecha,inicio,fin,
+    estado:"abierto"
+  });
+};
+
+// SELECCIONAR TURNO
+function seleccionarTurno(id){
+  turnoSeleccionado=id;
+  document.getElementById("panelJugador").style.display="block";
+  if(isAdmin){
+    document.getElementById("panelAdminTurno").style.display="block";
+  }
+
+  onValue(ref(db,"turnos/"+id+"/jugadores"), snapshot=>{
+    const data=snapshot.val()||{};
+    const lista=document.getElementById("listaJugadores");
+    lista.innerHTML="<div class='section-title'>👥 Inscriptos</div>";
+    Object.values(data).forEach(j=>{
+      lista.innerHTML+=`<div class="item">${j.nombre} - ${j.tipo}</div>`;
+    });
   });
 }
 
-async function reservar(fecha,hora,cancha){
+// ANOTARSE
+document.getElementById("anotarse").onclick=()=>{
+  if(!turnoSeleccionado) return alert("Elegí un turno");
+  const nombre=document.getElementById("nombre").value.trim();
+  const tipo=document.getElementById("tipo").value;
+  if(!nombre) return alert("Ingresá nombre");
 
-  const nombre=prompt("Tu nombre:");
-  if(!nombre) return;
+  push(ref(db,"turnos/"+turnoSeleccionado+"/jugadores"),{
+    nombre,tipo
+  });
 
-  const duracion=prompt("Duración (90 o 120 minutos):");
-  if(duracion!="90" && duracion!="120"){
-    alert("Solo 90 o 120");
-    return;
-  }
+  document.getElementById("nombre").value="";
+};
 
-  const bloquesNecesarios=duracion=="90"?3:4;
-  const horas=generarHoras();
-  const index=horas.indexOf(hora);
+// SORTEAR
+document.getElementById("sortear").onclick=()=>{
+  const canchas=parseInt(document.getElementById("canchas").value);
+  if(!canchas||canchas<1) return alert("Ingresá canchas");
 
-  if(index+bloquesNecesarios>horas.length){
-    alert("No alcanza el horario hasta las 23hs");
-    return;
-  }
+  onValue(ref(db,"turnos/"+turnoSeleccionado+"/jugadores"), snapshot=>{
+    const jugadores=Object.values(snapshot.val()||{});
+    const drives=mezclar(jugadores.filter(j=>j.tipo==="Drive"));
+    const reves=mezclar(jugadores.filter(j=>j.tipo==="Revés"));
 
-  const snapshot=await get(ref(db,"agenda/"+fecha));
-  const dataActual=snapshot.val()||{};
-
-  for(let i=0;i<bloquesNecesarios;i++){
-    const h=horas[index+i];
-    if(dataActual[h]?.["cancha"+cancha]){
-      alert("Se superpone con otra reserva");
+    if(drives.length!==reves.length){
+      alert("Drive y Revés deben ser iguales");
       return;
     }
-  }
 
-  for(let i=0;i<bloquesNecesarios;i++){
-    const h=horas[index+i];
-    await set(ref(db,`agenda/${fecha}/${h}/cancha${cancha}`),{
-      nombre
-    });
-  }
+    let parejas=[];
+    for(let i=0;i<drives.length;i++){
+      parejas.push(drives[i].nombre+" + "+reves[i].nombre);
+    }
 
-  alert("Reserva confirmada ✅");
-  cargarAgenda();
-}
+    const partidos=Math.min(Math.floor(parejas.length/2),canchas);
+    const resultado=document.getElementById("resultado");
+    resultado.innerHTML="<div class='section-title'>🏆 Partidos</div>";
 
-cargarAgenda();
+    for(let i=0;i<partidos;i++){
+      resultado.innerHTML+=`<div class="item">Cancha ${i+1}: ${parejas[i*2]} vs ${parejas[i*2+1]}</div>`;
+    }
+
+    if(parejas.length>partidos*2){
+      resultado.innerHTML+="<div class='section-title'>⏳ Espera</div>";
+      for(let i=partidos*2;i<parejas.length;i++){
+        resultado.innerHTML+=`<div class="item waiting">${parejas[i]}</div>`;
+      }
+    }
+
+  },{onlyOnce:true});
+};
+
+// CERRAR TURNO
+document.getElementById("cerrarTurno").onclick=()=>{
+  update(ref(db,"turnos/"+turnoSeleccionado),{
+    estado:"cerrado"
+  });
+  alert("Turno cerrado");
+};
 
 </script>
 
@@ -200,4 +254,3 @@ if ('serviceWorker' in navigator) {
 
 </body>
 </html>
-
