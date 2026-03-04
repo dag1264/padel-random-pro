@@ -154,16 +154,63 @@ onValue(ref(db,"turnos"), snapshot=>{
 
 // CREAR TURNO (ADMIN)
 document.getElementById("crearTurno").onclick=()=>{
-  const fecha=document.getElementById("fecha").value;
-  const inicio=document.getElementById("inicio").value;
-  const fin=document.getElementById("fin").value;
+  const fecha = document.getElementById("fecha").value;
+  const horaInicio = document.getElementById("horaInicio").value;
+  const horaFin = document.getElementById("horaFin").value;
 
-  if(!fecha||!inicio||!fin) return alert("Completar datos");
+  if (!fecha || !horaInicio || !horaFin) {
+    alert("Completá todos los campos");
+    return;
+  }
 
-  push(ref(db,"turnos"),{
-    fecha,inicio,fin,
-    estado:"abierto"
-  });
+  // Fecha y hora seleccionadas
+  const inicioSeleccionado = new Date(`${fecha}T${horaInicio}:00`);
+  const finSeleccionado = new Date(`${fecha}T${horaFin}:00`);
+
+  // Hora mínima permitida (próxima hora exacta)
+  const ahora = new Date();
+  const proximaHora = new Date(ahora);
+  proximaHora.setMinutes(0, 0, 0);
+  proximaHora.setHours(proximaHora.getHours() + 1);
+
+  if (inicioSeleccionado < proximaHora) {
+    alert("Solo se pueden crear turnos desde la próxima hora en adelante.");
+    return;
+  }
+
+  if (finSeleccionado <= inicioSeleccionado) {
+    alert("La hora de fin debe ser posterior a la de inicio.");
+    return;
+  }
+
+  const duracionMinutos = (finSeleccionado - inicioSeleccionado) / 60000;
+
+  if (duracionMinutos < 90) {
+    alert("El turno debe durar mínimo 1 hora y media.");
+    return;
+  }
+
+  if (duracionMinutos % 30 !== 0) {
+    alert("La duración debe ser en múltiplos de 30 minutos.");
+    return;
+  }
+
+  // Guardar en Firebase
+  const nuevoTurno = {
+    fecha: fecha,
+    inicio: horaInicio,
+    fin: horaFin,
+    estado: "abierto"
+  };
+
+  firebase.database().ref("turnos").push(nuevoTurno);
+
+  alert("Turno creado correctamente");
+
+  document.getElementById("fecha").value = "";
+  document.getElementById("horaInicio").value = "";
+  document.getElementById("horaFin").value = "";
+}
 };
 
 // SELECCIONAR TURNO
@@ -254,3 +301,4 @@ if ('serviceWorker' in navigator) {
 
 </body>
 </html>
+
