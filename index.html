@@ -17,7 +17,6 @@ body{
   text-align:center;
   padding:20px;
 }
-
 .card{
   background:white;
   color:#333;
@@ -27,7 +26,6 @@ body{
   max-width:420px;
   box-shadow:0 8px 20px rgba(0,0,0,0.35);
 }
-
 input,select{
   width:100%;
   padding:10px;
@@ -36,7 +34,6 @@ input,select{
   border:1px solid #ccc;
   box-sizing:border-box;
 }
-
 button{
   background:#00c853;
   border:none;
@@ -47,9 +44,7 @@ button{
   width:100%;
   cursor:pointer;
 }
-
 .admin{ background:#ff5252; }
-
 .item{
   background:white;
   color:#1e3c72;
@@ -59,7 +54,6 @@ button{
   font-weight:bold;
   max-width:420px;
 }
-
 .waiting{ background:#ffe082; color:#333; }
 .section-title{ font-weight:bold; margin-top:20px; }
 </style>
@@ -72,8 +66,8 @@ button{
 <div id="adminPanel" style="display:none;" class="card">
   <h3>👑 Crear Turno</h3>
   <input type="date" id="fecha">
-  <input type="time" id="inicio">
-  <input type="time" id="fin">
+  <input type="time" id="inicio" step="1800">
+  <input type="time" id="fin" step="1800">
   <button class="admin" id="crearTurno">Crear Turno</button>
 </div>
 
@@ -105,11 +99,11 @@ button{
 <script type="module">
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, push, onValue, remove, update } 
+import { getDatabase, ref, push, onValue, update }
 from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBYCPUSGq_uCutc3D10vSRCOtZRJZKr0fE",
+  apiKey: "AIzaSy...",
   authDomain: "turnos-padel-3f40e.firebaseapp.com",
   databaseURL: "https://turnos-padel-3f40e-default-rtdb.firebaseio.com",
   projectId: "turnos-padel-3f40e",
@@ -122,106 +116,75 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
 const isAdmin = window.location.search.includes("admin=1234");
+if(isAdmin) document.getElementById("adminPanel").style.display="block";
 
-if(isAdmin){
-  document.getElementById("adminPanel").style.display="block";
-}
+let turnoSeleccionado=null;
 
-let turnoSeleccionado = null;
+// 🔥 CONFIG PREMIUM HORARIO
+const ahora=new Date();
+const proximaHora=new Date(ahora);
+proximaHora.setMinutes(0,0,0);
+proximaHora.setHours(proximaHora.getHours()+1);
 
-function mezclar(lista){
-  for(let i=lista.length-1;i>0;i--){
-    const j=Math.floor(Math.random()*(i+1));
-    [lista[i],lista[j]]=[lista[j],lista[i]];
-  }
-  return lista;
-}
+document.getElementById("fecha").min=proximaHora.toISOString().split("T")[0];
+document.getElementById("inicio").min=proximaHora.toTimeString().slice(0,5);
 
-// LISTAR TURNOS
-onValue(ref(db,"turnos"), snapshot=>{
+// CREAR TURNO
+document.getElementById("crearTurno").onclick=()=>{
+  const fecha=document.getElementById("fecha").value;
+  const inicio=document.getElementById("inicio").value;
+  const fin=document.getElementById("fin").value;
+
+  if(!fecha||!inicio||!fin) return alert("Completá todo");
+
+  const ini=new Date(`${fecha}T${inicio}:00`);
+  const f=new Date(`${fecha}T${fin}:00`);
+
+  if(ini<proximaHora) return alert("Debe ser desde próxima hora");
+
+  const dur=(f-ini)/60000;
+
+  if(dur<90) return alert("Mínimo 1h30");
+  if(dur%30!==0) return alert("Solo múltiplos de 30 min");
+
+  push(ref(db,"turnos"),{
+    fecha,
+    inicio,
+    fin,
+    estado:"abierto"
+  });
+
+  alert("Turno creado ✔");
+};
+
+// LISTAR TURNOS + cierre automático
+onValue(ref(db,"turnos"),snapshot=>{
   const data=snapshot.val()||{};
-  const listaDiv=document.getElementById("listaTurnos");
-  listaDiv.innerHTML="";
+  const lista=document.getElementById("listaTurnos");
+  lista.innerHTML="";
+
   Object.entries(data).forEach(([id,t])=>{
+    const inicioTurno=new Date(`${t.fecha}T${t.inicio}:00`);
+    if(new Date()>inicioTurno && t.estado==="abierto"){
+      update(ref(db,"turnos/"+id),{estado:"cerrado"});
+      return;
+    }
+
     if(t.estado==="abierto"){
       const btn=document.createElement("button");
       btn.textContent=`${t.fecha} ${t.inicio}-${t.fin}`;
       btn.onclick=()=>seleccionarTurno(id);
-      listaDiv.appendChild(btn);
+      lista.appendChild(btn);
     }
   });
 });
 
-// CREAR TURNO (ADMIN)
-document.getElementById("crearTurno").onclick=()=>{
-  const fecha = document.getElementById("fecha").value;
-  const horaInicio = document.getElementById("horaInicio").value;
-  const horaFin = document.getElementById("horaFin").value;
-
-  if (!fecha || !horaInicio || !horaFin) {
-    alert("Completá todos los campos");
-    return;
-  }
-
-  // Fecha y hora seleccionadas
-  const inicioSeleccionado = new Date(`${fecha}T${horaInicio}:00`);
-  const finSeleccionado = new Date(`${fecha}T${horaFin}:00`);
-
-  // Hora mínima permitida (próxima hora exacta)
-  const ahora = new Date();
-  const proximaHora = new Date(ahora);
-  proximaHora.setMinutes(0, 0, 0);
-  proximaHora.setHours(proximaHora.getHours() + 1);
-
-  if (inicioSeleccionado < proximaHora) {
-    alert("Solo se pueden crear turnos desde la próxima hora en adelante.");
-    return;
-  }
-
-  if (finSeleccionado <= inicioSeleccionado) {
-    alert("La hora de fin debe ser posterior a la de inicio.");
-    return;
-  }
-
-  const duracionMinutos = (finSeleccionado - inicioSeleccionado) / 60000;
-
-  if (duracionMinutos < 90) {
-    alert("El turno debe durar mínimo 1 hora y media.");
-    return;
-  }
-
-  if (duracionMinutos % 30 !== 0) {
-    alert("La duración debe ser en múltiplos de 30 minutos.");
-    return;
-  }
-
-  // Guardar en Firebase
-  const nuevoTurno = {
-    fecha: fecha,
-    inicio: horaInicio,
-    fin: horaFin,
-    estado: "abierto"
-  };
-
-  firebase.database().ref("turnos").push(nuevoTurno);
-
-  alert("Turno creado correctamente");
-
-  document.getElementById("fecha").value = "";
-  document.getElementById("horaInicio").value = "";
-  document.getElementById("horaFin").value = "";
-}
-};
-
-// SELECCIONAR TURNO
 function seleccionarTurno(id){
   turnoSeleccionado=id;
   document.getElementById("panelJugador").style.display="block";
-  if(isAdmin){
-    document.getElementById("panelAdminTurno").style.display="block";
-  }
+  if(isAdmin) document.getElementById("panelAdminTurno").style.display="block";
 
-  onValue(ref(db,"turnos/"+id+"/jugadores"), snapshot=>{
+  onValue(ref(db,"turnos/"+id+"/jugadores"),snapshot=>{
     const data=snapshot.val()||{};
     const lista=document.getElementById("listaJugadores");
     lista.innerHTML="<div class='section-title'>👥 Inscriptos</div>";
@@ -231,64 +194,14 @@ function seleccionarTurno(id){
   });
 }
 
-// ANOTARSE
 document.getElementById("anotarse").onclick=()=>{
-  if(!turnoSeleccionado) return alert("Elegí un turno");
+  if(!turnoSeleccionado) return alert("Elegí turno");
   const nombre=document.getElementById("nombre").value.trim();
   const tipo=document.getElementById("tipo").value;
-  if(!nombre) return alert("Ingresá nombre");
+  if(!nombre) return alert("Nombre vacío");
 
-  push(ref(db,"turnos/"+turnoSeleccionado+"/jugadores"),{
-    nombre,tipo
-  });
-
+  push(ref(db,"turnos/"+turnoSeleccionado+"/jugadores"),{nombre,tipo});
   document.getElementById("nombre").value="";
-};
-
-// SORTEAR
-document.getElementById("sortear").onclick=()=>{
-  const canchas=parseInt(document.getElementById("canchas").value);
-  if(!canchas||canchas<1) return alert("Ingresá canchas");
-
-  onValue(ref(db,"turnos/"+turnoSeleccionado+"/jugadores"), snapshot=>{
-    const jugadores=Object.values(snapshot.val()||{});
-    const drives=mezclar(jugadores.filter(j=>j.tipo==="Drive"));
-    const reves=mezclar(jugadores.filter(j=>j.tipo==="Revés"));
-
-    if(drives.length!==reves.length){
-      alert("Drive y Revés deben ser iguales");
-      return;
-    }
-
-    let parejas=[];
-    for(let i=0;i<drives.length;i++){
-      parejas.push(drives[i].nombre+" + "+reves[i].nombre);
-    }
-
-    const partidos=Math.min(Math.floor(parejas.length/2),canchas);
-    const resultado=document.getElementById("resultado");
-    resultado.innerHTML="<div class='section-title'>🏆 Partidos</div>";
-
-    for(let i=0;i<partidos;i++){
-      resultado.innerHTML+=`<div class="item">Cancha ${i+1}: ${parejas[i*2]} vs ${parejas[i*2+1]}</div>`;
-    }
-
-    if(parejas.length>partidos*2){
-      resultado.innerHTML+="<div class='section-title'>⏳ Espera</div>";
-      for(let i=partidos*2;i<parejas.length;i++){
-        resultado.innerHTML+=`<div class="item waiting">${parejas[i]}</div>`;
-      }
-    }
-
-  },{onlyOnce:true});
-};
-
-// CERRAR TURNO
-document.getElementById("cerrarTurno").onclick=()=>{
-  update(ref(db,"turnos/"+turnoSeleccionado),{
-    estado:"cerrado"
-  });
-  alert("Turno cerrado");
 };
 
 </script>
@@ -301,4 +214,3 @@ if ('serviceWorker' in navigator) {
 
 </body>
 </html>
-
