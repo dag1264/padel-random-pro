@@ -209,5 +209,15 @@
 
   </script>
 
+  <script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/padel-random-pro/sw.js')
+    .then(function() {
+      console.log('Service Worker registrado');
+    });
+}
+</script>
+
 </body>
+
 </html>
