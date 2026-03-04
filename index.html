@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Padel Random Pro</title>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1e3c72, #2a5298);
+      color: white;
+      text-align: center;
+      padding: 20px;
+    }
+
+    h1 { font-size: 28px; margin-bottom: 5px; }
+    .sub { opacity: 0.8; margin-bottom: 20px; font-size: 14px; }
+
+    .card {
+      background: white;
+      color: #333;
+      border-radius: 18px;
+      padding: 18px;
+      margin: 15px auto;
+      max-width: 420px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.35);
+    }
+
+    textarea {
+      width: 100%;
+      height: 120px;
+      border-radius: 12px;
+      border: 1px solid #ddd;
+      padding: 12px;
+      font-size: 15px;
+      resize: none;
+      box-sizing: border-box;
+    }
+
+    input {
+      width: 100%;
+      padding: 10px;
+      margin-top: 8px;
+      border-radius: 10px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+    }
+
+    .btn {
+      background: #00c853;
+      border: none;
+      color: white;
+      font-size: 18px;
+      padding: 14px;
+      border-radius: 14px;
+      cursor: pointer;
+      margin-top: 12px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 6px 14px rgba(0,0,0,0.3);
+      transition: all 0.15s ease;
+    }
+
+    .btn:active { transform: scale(0.97); }
+
+    .section-title {
+      margin-top: 25px;
+      font-size: 20px;
+      font-weight: bold;
+    }
+
+    .match, .pareja {
+      background: #ffffff;
+      color: #1e3c72;
+      margin: 10px auto;
+      padding: 14px;
+      border-radius: 14px;
+      font-weight: bold;
+      font-size: 16px;
+      max-width: 420px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+    }
+
+    .waiting { background: #ffe082; color: #333; }
+
+    .error {
+      margin-top: 12px;
+      font-weight: bold;
+      color: #ffeb3b;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>🎾 Padel Random Pro</h1>
+  <div class="sub">Sorteo + Organización automática</div>
+
+  <div class="card">
+    <h3>Drives</h3>
+    <textarea id="drives" placeholder="Un nombre por línea"></textarea>
+  </div>
+
+  <div class="card">
+    <h3>Reves</h3>
+    <textarea id="reves" placeholder="Un nombre por línea"></textarea>
+  </div>
+
+  <div class="card">
+    <h3>Cantidad de canchas</h3>
+    <input type="number" id="canchas" placeholder="Ej: 2" min="1">
+  </div>
+
+  <button class="btn" onclick="sortear()">🎲 Organizar jornada</button>
+
+  <div class="error" id="error"></div>
+  <div id="resultado"></div>
+
+  <script>
+
+    function mezclar(lista) {
+      for (let i = lista.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [lista[i], lista[j]] = [lista[j], lista[i]];
+      }
+      return lista;
+    }
+
+    function sortear() {
+
+      const drives = document.getElementById("drives").value
+        .split("\n")
+        .map(n => n.trim())
+        .filter(n => n !== "");
+
+      const reves = document.getElementById("reves").value
+        .split("\n")
+        .map(n => n.trim())
+        .filter(n => n !== "");
+
+      const cantidadCanchas = parseInt(document.getElementById("canchas").value);
+
+      const errorDiv = document.getElementById("error");
+      const resultadoDiv = document.getElementById("resultado");
+
+      errorDiv.textContent = "";
+      resultadoDiv.innerHTML = "";
+
+      if (!cantidadCanchas || cantidadCanchas < 1) {
+        errorDiv.textContent = "Ingresá una cantidad válida de canchas";
+        return;
+      }
+
+      if (drives.length === 0 || reves.length === 0) {
+        errorDiv.textContent = "Cargá jugadores en ambas listas";
+        return;
+      }
+
+      if (drives.length !== reves.length) {
+        errorDiv.textContent = "La cantidad de drives y reves debe ser igual";
+        return;
+      }
+
+      const drivesMezclados = mezclar([...drives]);
+      const revesMezclados = mezclar([...reves]);
+
+      const parejas = [];
+      for (let i = 0; i < drivesMezclados.length; i++) {
+        parejas.push(drivesMezclados[i] + " + " + revesMezclados[i]);
+      }
+
+      const partidosPosibles = Math.floor(parejas.length / 2);
+      const partidosEnJuego = Math.min(partidosPosibles, cantidadCanchas);
+
+      if (partidosEnJuego > 0) {
+        const title = document.createElement("div");
+        title.className = "section-title";
+        title.textContent = "🏆 Partidos en juego";
+        resultadoDiv.appendChild(title);
+
+        for (let i = 0; i < partidosEnJuego; i++) {
+          const matchDiv = document.createElement("div");
+          matchDiv.className = "match";
+          matchDiv.textContent =
+            "Cancha " + (i + 1) + ": " +
+            parejas[i * 2] + " vs " + parejas[i * 2 + 1];
+          resultadoDiv.appendChild(matchDiv);
+        }
+      }
+
+      const parejasUsadas = partidosEnJuego * 2;
+
+      if (parejas.length > parejasUsadas) {
+        const waitingTitle = document.createElement("div");
+        waitingTitle.className = "section-title";
+        waitingTitle.textContent = "⏳ Lista de espera";
+        resultadoDiv.appendChild(waitingTitle);
+
+        for (let i = parejasUsadas; i < parejas.length; i++) {
+          const waitDiv = document.createElement("div");
+          waitDiv.className = "pareja waiting";
+          waitDiv.textContent = parejas[i];
+          resultadoDiv.appendChild(waitDiv);
+        }
+      }
+    }
+
+  </script>
+
+</body>
+</html>
