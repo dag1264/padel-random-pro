@@ -70,15 +70,13 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
 import { getDatabase, ref, get, set }
 from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-const firebaseConfig = {
-  apiKey: "TU_API",
-  authDomain: "TU_AUTH",
-  databaseURL: "TU_DB",
-  projectId: "TU_PROJECT",
-  storageBucket: "TU_BUCKET",
-  messagingSenderId: "TU_MSG",
-  appId: "TU_APP"
-};
+const firebaseConfig = { apiKey: "AIzaSyBYCPUSGq_uCutc3D10vSRCOtZRJZKr0fE", 
+                        authDomain: "turnos-padel-3f40e.firebaseapp.com", 
+                        databaseURL: "https://turnos-padel-3f40e-default-rtdb.firebaseio.com", 
+                        projectId: "turnos-padel-3f40e", 
+                        storageBucket: "turnos-padel-3f40e.firebasestorage.app", 
+                        messagingSenderId: "863154513883", 
+                        appId: "1:863154513883:web:a20fb9cf3307048a54e9fe" };
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
@@ -202,3 +200,4 @@ if ('serviceWorker' in navigator) {
 
 </body>
 </html>
+
