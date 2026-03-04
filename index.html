@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Padel Random Pro - Agenda</title>
+<title>Padel Random Pro</title>
 
 <link rel="manifest" href="/padel-random-pro/manifest.json">
 <meta name="theme-color" content="#1e3c72">
@@ -17,38 +17,29 @@ body{
   text-align:center;
   padding:20px;
 }
-
 .card{
   background:white;
   color:#333;
   border-radius:18px;
   padding:18px;
   margin:15px auto;
-  max-width:600px;
+  max-width:700px;
   box-shadow:0 8px 20px rgba(0,0,0,0.35);
 }
-
-input{
+input,select{
   width:100%;
   padding:10px;
   margin-top:8px;
   border-radius:10px;
   border:1px solid #ccc;
-  box-sizing:border-box;
 }
-
 .agenda-grid{
   display:grid;
   grid-template-columns:80px 1fr 1fr;
   gap:6px;
   margin-top:15px;
 }
-
-.hora{
-  font-weight:bold;
-  align-self:center;
-}
-
+.hora{ font-weight:bold; align-self:center; }
 .slot{
   padding:12px;
   border-radius:10px;
@@ -56,21 +47,10 @@ input{
   font-size:14px;
   transition:0.2s;
 }
-
-.libre{
-  background:#00c853;
-  color:white;
-}
-
-.libre:hover{
-  transform:scale(1.05);
-}
-
-.ocupado{
-  background:#ff5252;
-  color:white;
-  cursor:not-allowed;
-}
+.libre{ background:#00c853; color:white; }
+.libre:hover{ transform:scale(1.05); }
+.ocupado{ background:#ff5252; color:white; cursor:not-allowed; }
+.pasado{ background:#999; color:white; cursor:not-allowed; }
 </style>
 </head>
 
@@ -79,7 +59,7 @@ input{
 <h1>🎾 Padel Random Pro</h1>
 
 <div class="card">
-  <h3>📅 Agenda de Reservas</h3>
+  <h3>📅 Agenda</h3>
   <input type="date" id="fechaAgenda">
   <div id="agenda"></div>
 </div>
@@ -87,7 +67,7 @@ input{
 <script type="module">
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, onValue, set }
+import { getDatabase, ref, onValue, get, set }
 from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 const firebaseConfig = {
@@ -103,13 +83,11 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-const fechaAgendaInput = document.getElementById("fechaAgenda");
-const agendaDiv = document.getElementById("agenda");
+const fechaInput=document.getElementById("fechaAgenda");
+const agendaDiv=document.getElementById("agenda");
 
-const hoy = new Date();
-fechaAgendaInput.value = hoy.toISOString().split("T")[0];
-
-fechaAgendaInput.addEventListener("change", cargarAgenda);
+fechaInput.value=new Date().toISOString().split("T")[0];
+fechaInput.addEventListener("change",cargarAgenda);
 
 function generarHoras(){
   const horas=[];
@@ -120,53 +98,93 @@ function generarHoras(){
   return horas;
 }
 
+function horaEsPasada(fecha,hora){
+  const ahora=new Date();
+  const bloque=new Date(`${fecha}T${hora}:00`);
+  return bloque<ahora;
+}
+
 function cargarAgenda(){
-  const fecha = fechaAgendaInput.value;
+  const fecha=fechaInput.value;
   agendaDiv.innerHTML="";
-  const grid = document.createElement("div");
+  const grid=document.createElement("div");
   grid.className="agenda-grid";
   agendaDiv.appendChild(grid);
 
-  const horas = generarHoras();
+  const horas=generarHoras();
 
-  grid.innerHTML += "<div></div><div><b>Cancha 1</b></div><div><b>Cancha 2</b></div>";
+  grid.innerHTML="<div></div><div><b>Cancha 1</b></div><div><b>Cancha 2</b></div>";
 
-  const agendaRef = ref(db,"agenda/"+fecha);
+  const agendaRef=ref(db,"agenda/"+fecha);
 
   onValue(agendaRef,(snapshot)=>{
-    const data = snapshot.val()||{};
-    grid.innerHTML = "<div></div><div><b>Cancha 1</b></div><div><b>Cancha 2</b></div>";
+    const data=snapshot.val()||{};
+    grid.innerHTML="<div></div><div><b>Cancha 1</b></div><div><b>Cancha 2</b></div>";
 
     horas.forEach(hora=>{
       grid.innerHTML+=`<div class="hora">${hora}</div>`;
 
       for(let c=1;c<=2;c++){
-        const ocupado = data[hora]?.["cancha"+c];
-        const div = document.createElement("div");
+        const ocupado=data[hora]?.["cancha"+c];
+        const div=document.createElement("div");
 
-        if(ocupado){
+        if(horaEsPasada(fecha,hora)){
+          div.className="slot pasado";
+          div.textContent="Pasado";
+        }
+        else if(ocupado){
           div.className="slot ocupado";
           div.textContent=ocupado.nombre;
-        }else{
+        }
+        else{
           div.className="slot libre";
           div.textContent="Libre";
-          div.onclick=()=>reservar(fecha,hora,c);
+          div.onclick=()=>reservar(fecha,hora,c,data);
         }
 
         grid.appendChild(div);
       }
     });
-
   });
 }
 
-async function reservar(fecha,hora,cancha){
-  const nombre = prompt("Tu nombre:");
+async function reservar(fecha,hora,cancha,dataActual){
+
+  const nombre=prompt("Tu nombre:");
   if(!nombre) return;
 
-  await set(ref(db,`agenda/${fecha}/${hora}/cancha${cancha}`),{
-    nombre
-  });
+  const duracion=prompt("Duración (90 o 120 minutos):");
+  if(duracion!="90" && duracion!="120"){
+    alert("Solo 90 o 120");
+    return;
+  }
+
+  const bloquesNecesarios=duracion=="90"?3:4;
+  const horas=generarHoras();
+  const index=horas.indexOf(hora);
+
+  if(index+bloquesNecesarios>horas.length){
+    alert("No alcanza el horario hasta las 23hs");
+    return;
+  }
+
+  // verificar disponibilidad
+  for(let i=0;i<bloquesNecesarios;i++){
+    const h=horas[index+i];
+    if(dataActual[h]?.["cancha"+cancha]){
+      alert("Se superpone con otra reserva");
+      return;
+    }
+  }
+
+  // reservar todos los bloques
+  for(let i=0;i<bloquesNecesarios;i++){
+    const h=horas[index+i];
+    await set(ref(db,`agenda/${fecha}/${h}/cancha${cancha}`),{
+      nombre
+    });
+  }
+
 }
 
 cargarAgenda();
