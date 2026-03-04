@@ -1,7 +1,8 @@
 {
   "name": "Padel Random Pro",
   "short_name": "Padel Random",
-  "start_url": ".",
+  "start_url": "/padel-random-pro/",
+  "scope": "/padel-random-pro/",
   "display": "standalone",
   "background_color": "#1e3c72",
   "theme_color": "#1e3c72",
@@ -17,4 +18,5 @@
       "type": "image/png"
     }
   ]
+
 }
