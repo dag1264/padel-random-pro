@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Padel Random Pro</title>
+<title>Padel Random Pro - Agenda</title>
 
 <link rel="manifest" href="/padel-random-pro/manifest.json">
 <meta name="theme-color" content="#1e3c72">
@@ -17,16 +17,18 @@ body{
   text-align:center;
   padding:20px;
 }
+
 .card{
   background:white;
   color:#333;
   border-radius:18px;
   padding:18px;
   margin:15px auto;
-  max-width:420px;
+  max-width:600px;
   box-shadow:0 8px 20px rgba(0,0,0,0.35);
 }
-input,select{
+
+input{
   width:100%;
   padding:10px;
   margin-top:8px;
@@ -34,28 +36,41 @@ input,select{
   border:1px solid #ccc;
   box-sizing:border-box;
 }
-button{
-  background:#00c853;
-  border:none;
-  color:white;
-  padding:12px;
-  border-radius:14px;
-  margin-top:10px;
-  width:100%;
-  cursor:pointer;
+
+.agenda-grid{
+  display:grid;
+  grid-template-columns:80px 1fr 1fr;
+  gap:6px;
+  margin-top:15px;
 }
-.admin{ background:#ff5252; }
-.item{
-  background:white;
-  color:#1e3c72;
-  margin:8px auto;
-  padding:12px;
-  border-radius:14px;
+
+.hora{
   font-weight:bold;
-  max-width:420px;
+  align-self:center;
 }
-.waiting{ background:#ffe082; color:#333; }
-.section-title{ font-weight:bold; margin-top:20px; }
+
+.slot{
+  padding:12px;
+  border-radius:10px;
+  cursor:pointer;
+  font-size:14px;
+  transition:0.2s;
+}
+
+.libre{
+  background:#00c853;
+  color:white;
+}
+
+.libre:hover{
+  transform:scale(1.05);
+}
+
+.ocupado{
+  background:#ff5252;
+  color:white;
+  cursor:not-allowed;
+}
 </style>
 </head>
 
@@ -63,47 +78,20 @@ button{
 
 <h1>🎾 Padel Random Pro</h1>
 
-<div id="adminPanel" style="display:none;" class="card">
-  <h3>👑 Crear Turno</h3>
-  <input type="date" id="fecha">
-  <input type="time" id="inicio" step="1800">
-  <input type="time" id="fin" step="1800">
-  <button class="admin" id="crearTurno">Crear Turno</button>
-</div>
-
 <div class="card">
-  <h3>Turnos disponibles</h3>
-  <div id="listaTurnos"></div>
+  <h3>📅 Agenda de Reservas</h3>
+  <input type="date" id="fechaAgenda">
+  <div id="agenda"></div>
 </div>
-
-<div id="panelJugador" style="display:none;" class="card">
-  <h3>Anotarse</h3>
-  <input id="nombre" placeholder="Tu nombre">
-  <select id="tipo">
-    <option>Drive</option>
-    <option>Revés</option>
-  </select>
-  <button id="anotarse">Anotarme</button>
-</div>
-
-<div id="panelAdminTurno" style="display:none;" class="card">
-  <h3>Admin Turno</h3>
-  <input type="number" id="canchas" placeholder="Cantidad de canchas" min="1">
-  <button class="admin" id="sortear">Sortear</button>
-  <button class="admin" id="cerrarTurno">Cerrar Turno</button>
-</div>
-
-<div id="listaJugadores"></div>
-<div id="resultado"></div>
 
 <script type="module">
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, push, onValue, update }
+import { getDatabase, ref, onValue, set }
 from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSy...",
+  apiKey: "AIzaSyBYCPUSGq_uCutc3D10vSRCOtZRJZKr0fE",
   authDomain: "turnos-padel-3f40e.firebaseapp.com",
   databaseURL: "https://turnos-padel-3f40e-default-rtdb.firebaseio.com",
   projectId: "turnos-padel-3f40e",
@@ -115,94 +103,73 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-const isAdmin = window.location.search.includes("admin=1234");
-if(isAdmin) document.getElementById("adminPanel").style.display="block";
+const fechaAgendaInput = document.getElementById("fechaAgenda");
+const agendaDiv = document.getElementById("agenda");
 
-let turnoSeleccionado=null;
+const hoy = new Date();
+fechaAgendaInput.value = hoy.toISOString().split("T")[0];
 
-// 🔥 CONFIG PREMIUM HORARIO
-const ahora=new Date();
-const proximaHora=new Date(ahora);
-proximaHora.setMinutes(0,0,0);
-proximaHora.setHours(proximaHora.getHours()+1);
+fechaAgendaInput.addEventListener("change", cargarAgenda);
 
-document.getElementById("fecha").min=proximaHora.toISOString().split("T")[0];
-document.getElementById("inicio").min=proximaHora.toTimeString().slice(0,5);
+function generarHoras(){
+  const horas=[];
+  for(let h=9;h<23;h++){
+    horas.push(`${String(h).padStart(2,"0")}:00`);
+    horas.push(`${String(h).padStart(2,"0")}:30`);
+  }
+  return horas;
+}
 
-// CREAR TURNO
-document.getElementById("crearTurno").onclick=()=>{
-  const fecha=document.getElementById("fecha").value;
-  const inicio=document.getElementById("inicio").value;
-  const fin=document.getElementById("fin").value;
+function cargarAgenda(){
+  const fecha = fechaAgendaInput.value;
+  agendaDiv.innerHTML="";
+  const grid = document.createElement("div");
+  grid.className="agenda-grid";
+  agendaDiv.appendChild(grid);
 
-  if(!fecha||!inicio||!fin) return alert("Completá todo");
+  const horas = generarHoras();
 
-  const ini=new Date(`${fecha}T${inicio}:00`);
-  const f=new Date(`${fecha}T${fin}:00`);
+  grid.innerHTML += "<div></div><div><b>Cancha 1</b></div><div><b>Cancha 2</b></div>";
 
-  if(ini<proximaHora) return alert("Debe ser desde próxima hora");
+  const agendaRef = ref(db,"agenda/"+fecha);
 
-  const dur=(f-ini)/60000;
+  onValue(agendaRef,(snapshot)=>{
+    const data = snapshot.val()||{};
+    grid.innerHTML = "<div></div><div><b>Cancha 1</b></div><div><b>Cancha 2</b></div>";
 
-  if(dur<90) return alert("Mínimo 1h30");
-  if(dur%30!==0) return alert("Solo múltiplos de 30 min");
+    horas.forEach(hora=>{
+      grid.innerHTML+=`<div class="hora">${hora}</div>`;
 
-  push(ref(db,"turnos"),{
-    fecha,
-    inicio,
-    fin,
-    estado:"abierto"
-  });
+      for(let c=1;c<=2;c++){
+        const ocupado = data[hora]?.["cancha"+c];
+        const div = document.createElement("div");
 
-  alert("Turno creado ✔");
-};
+        if(ocupado){
+          div.className="slot ocupado";
+          div.textContent=ocupado.nombre;
+        }else{
+          div.className="slot libre";
+          div.textContent="Libre";
+          div.onclick=()=>reservar(fecha,hora,c);
+        }
 
-// LISTAR TURNOS + cierre automático
-onValue(ref(db,"turnos"),snapshot=>{
-  const data=snapshot.val()||{};
-  const lista=document.getElementById("listaTurnos");
-  lista.innerHTML="";
-
-  Object.entries(data).forEach(([id,t])=>{
-    const inicioTurno=new Date(`${t.fecha}T${t.inicio}:00`);
-    if(new Date()>inicioTurno && t.estado==="abierto"){
-      update(ref(db,"turnos/"+id),{estado:"cerrado"});
-      return;
-    }
-
-    if(t.estado==="abierto"){
-      const btn=document.createElement("button");
-      btn.textContent=`${t.fecha} ${t.inicio}-${t.fin}`;
-      btn.onclick=()=>seleccionarTurno(id);
-      lista.appendChild(btn);
-    }
-  });
-});
-
-function seleccionarTurno(id){
-  turnoSeleccionado=id;
-  document.getElementById("panelJugador").style.display="block";
-  if(isAdmin) document.getElementById("panelAdminTurno").style.display="block";
-
-  onValue(ref(db,"turnos/"+id+"/jugadores"),snapshot=>{
-    const data=snapshot.val()||{};
-    const lista=document.getElementById("listaJugadores");
-    lista.innerHTML="<div class='section-title'>👥 Inscriptos</div>";
-    Object.values(data).forEach(j=>{
-      lista.innerHTML+=`<div class="item">${j.nombre} - ${j.tipo}</div>`;
+        grid.appendChild(div);
+      }
     });
+
   });
 }
 
-document.getElementById("anotarse").onclick=()=>{
-  if(!turnoSeleccionado) return alert("Elegí turno");
-  const nombre=document.getElementById("nombre").value.trim();
-  const tipo=document.getElementById("tipo").value;
-  if(!nombre) return alert("Nombre vacío");
+async function reservar(fecha,hora,cancha){
+  const nombre = prompt("Tu nombre:");
+  if(!nombre) return;
 
-  push(ref(db,"turnos/"+turnoSeleccionado+"/jugadores"),{nombre,tipo});
-  document.getElementById("nombre").value="";
-};
+  await set(ref(db,`agenda/${fecha}/${hora}/cancha${cancha}`),{
+    nombre
+  });
+}
+
+cargarAgenda();
 
 </script>
 
