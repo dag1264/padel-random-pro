@@ -26,7 +26,7 @@ body{
   max-width:700px;
   box-shadow:0 8px 20px rgba(0,0,0,0.35);
 }
-input,select{
+input{
   width:100%;
   padding:10px;
   margin-top:8px;
@@ -67,17 +67,17 @@ input,select{
 <script type="module">
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, onValue, get, set }
+import { getDatabase, ref, get, set }
 from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBYCPUSGq_uCutc3D10vSRCOtZRJZKr0fE",
-  authDomain: "turnos-padel-3f40e.firebaseapp.com",
-  databaseURL: "https://turnos-padel-3f40e-default-rtdb.firebaseio.com",
-  projectId: "turnos-padel-3f40e",
-  storageBucket: "turnos-padel-3f40e.firebasestorage.app",
-  messagingSenderId: "863154513883",
-  appId: "1:863154513883:web:a20fb9cf3307048a54e9fe"
+  apiKey: "TU_API",
+  authDomain: "TU_AUTH",
+  databaseURL: "TU_DB",
+  projectId: "TU_PROJECT",
+  storageBucket: "TU_BUCKET",
+  messagingSenderId: "TU_MSG",
+  appId: "TU_APP"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -104,7 +104,8 @@ function horaEsPasada(fecha,hora){
   return bloque<ahora;
 }
 
-function cargarAgenda(){
+async function cargarAgenda(){
+
   const fecha=fechaInput.value;
   agendaDiv.innerHTML="";
   const grid=document.createElement("div");
@@ -112,43 +113,42 @@ function cargarAgenda(){
   agendaDiv.appendChild(grid);
 
   const horas=generarHoras();
-
   grid.innerHTML="<div></div><div><b>Cancha 1</b></div><div><b>Cancha 2</b></div>";
 
-  const agendaRef=ref(db,"agenda/"+fecha);
+  const snapshot=await get(ref(db,"agenda/"+fecha));
+  const data=snapshot.val()||{};
 
-  onValue(agendaRef,(snapshot)=>{
-    const data=snapshot.val()||{};
-    grid.innerHTML="<div></div><div><b>Cancha 1</b></div><div><b>Cancha 2</b></div>";
+  horas.forEach(hora=>{
+    const horaDiv=document.createElement("div");
+    horaDiv.className="hora";
+    horaDiv.textContent=hora;
+    grid.appendChild(horaDiv);
 
-    horas.forEach(hora=>{
-      grid.innerHTML+=`<div class="hora">${hora}</div>`;
+    for(let c=1;c<=2;c++){
 
-      for(let c=1;c<=2;c++){
-        const ocupado=data[hora]?.["cancha"+c];
-        const div=document.createElement("div");
+      const div=document.createElement("div");
+      const ocupado=data[hora]?.["cancha"+c];
 
-        if(horaEsPasada(fecha,hora)){
-          div.className="slot pasado";
-          div.textContent="Pasado";
-        }
-        else if(ocupado){
-          div.className="slot ocupado";
-          div.textContent=ocupado.nombre;
-        }
-        else{
-          div.className="slot libre";
-          div.textContent="Libre";
-          div.onclick=()=>reservar(fecha,hora,c,data);
-        }
-
-        grid.appendChild(div);
+      if(horaEsPasada(fecha,hora)){
+        div.className="slot pasado";
+        div.textContent="Pasado";
       }
-    });
+      else if(ocupado){
+        div.className="slot ocupado";
+        div.textContent=ocupado.nombre;
+      }
+      else{
+        div.className="slot libre";
+        div.textContent="Libre";
+        div.addEventListener("click",()=>reservar(fecha,hora,c));
+      }
+
+      grid.appendChild(div);
+    }
   });
 }
 
-async function reservar(fecha,hora,cancha,dataActual){
+async function reservar(fecha,hora,cancha){
 
   const nombre=prompt("Tu nombre:");
   if(!nombre) return;
@@ -168,7 +168,9 @@ async function reservar(fecha,hora,cancha,dataActual){
     return;
   }
 
-  // verificar disponibilidad
+  const snapshot=await get(ref(db,"agenda/"+fecha));
+  const dataActual=snapshot.val()||{};
+
   for(let i=0;i<bloquesNecesarios;i++){
     const h=horas[index+i];
     if(dataActual[h]?.["cancha"+cancha]){
@@ -177,7 +179,6 @@ async function reservar(fecha,hora,cancha,dataActual){
     }
   }
 
-  // reservar todos los bloques
   for(let i=0;i<bloquesNecesarios;i++){
     const h=horas[index+i];
     await set(ref(db,`agenda/${fecha}/${h}/cancha${cancha}`),{
@@ -185,6 +186,8 @@ async function reservar(fecha,hora,cancha,dataActual){
     });
   }
 
+  alert("Reserva confirmada ✅");
+  cargarAgenda();
 }
 
 cargarAgenda();
